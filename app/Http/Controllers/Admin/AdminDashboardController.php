@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\Feature;
 use App\Models\License;
 use App\Models\LicenseActivation;
 use App\Models\Package;
@@ -26,7 +27,8 @@ class AdminDashboardController extends Controller
             Artisan::call('db:seed', ['--force' => true]);
         }
 
-        $packages = Package::withCount('features')->orderBy('sort_order')->get();
+        $packages = Package::with('features')->withCount('features')->orderBy('sort_order')->get();
+        $features = Feature::orderBy('module')->orderBy('name')->get();
         $users = User::withCount('licenses')->latest()->limit(20)->get();
         $licenses = License::with(['package', 'user', 'activeActivations'])
             ->latest()
@@ -50,6 +52,7 @@ class AdminDashboardController extends Controller
 
         return view('admin.dashboard', compact(
             'packages',
+            'features',
             'users',
             'licenses',
             'recentActivations',
@@ -209,6 +212,11 @@ class AdminDashboardController extends Controller
 
     public function toggleUserStatus(Request $request, User $user): RedirectResponse
     {
+        if ($request->user()->is($user)) {
+            return redirect()->route('admin.dashboard')
+                ->withErrors(['user' => 'Akun admin yang sedang digunakan tidak dapat dinonaktifkan.']);
+        }
+
         $nextStatus = $user->status === 'active' ? 'suspended' : 'active';
         $user->update(['status' => $nextStatus]);
 
@@ -265,6 +273,37 @@ class AdminDashboardController extends Controller
         return redirect()
             ->route('admin.dashboard')
             ->with('status', "Konfigurasi paket {$package->code} berhasil diperbarui.");
+    }
+
+    public function updatePackageFeatures(Request $request, Package $package): RedirectResponse
+    {
+        $validated = $request->validate([
+            'feature_ids' => ['nullable', 'array'],
+            'feature_ids.*' => ['integer', 'distinct', 'exists:features,id'],
+        ]);
+
+        $previousCodes = $package->features()->orderBy('code')->pluck('code')->all();
+        $package->features()->sync($validated['feature_ids'] ?? []);
+        $currentCodes = $package->features()->orderBy('code')->pluck('code')->all();
+
+        AuditLog::create([
+            'actor_id' => $request->user()?->id,
+            'action' => 'package.features_updated',
+            'target_type' => 'Package',
+            'target_id' => (string) $package->id,
+            'metadata' => [
+                'code' => $package->code,
+                'previous_features' => $previousCodes,
+                'current_features' => $currentCodes,
+            ],
+            'ip_address' => $request->ip(),
+            'user_agent' => (string) $request->userAgent(),
+            'created_at' => now(),
+        ]);
+
+        return redirect()
+            ->route('admin.dashboard')
+            ->with('status', "Fitur paket {$package->code} berhasil diperbarui.");
     }
 }
 

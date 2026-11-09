@@ -33,6 +33,8 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
         }
         .brand {
             display: flex;
@@ -92,6 +94,13 @@
             gap: 20px;
             margin-bottom: 24px;
         }
+        .feature-packages { margin-bottom: 24px; }
+        .feature-packages details { border-top: 1px solid var(--border); padding: 12px 0; }
+        .feature-packages summary { cursor: pointer; font-weight: 700; }
+        .feature-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 16px; margin: 14px 0; }
+        .feature-options label { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-weight: 500; }
+        .feature-options input { width: auto; margin-top: 4px; }
+        .feature-options small { display: block; color: var(--text-secondary); font-weight: 400; }
         @media (max-width: 900px) {
             .layout-grid { grid-template-columns: 1fr; }
         }
@@ -173,12 +182,18 @@
                 <div style="font-size: 12px; color: var(--text-secondary);">Server Otoritatif Lisensi, Paket (FREE/PRO/BUSINESS), & Aktivasi Perangkat</div>
             </div>
         </div>
-        <div class="badge">Ed25519 Signed Tokens</div>
+        <form method="POST" action="{{ route('admin.logout') }}">
+            @csrf
+            <button class="btn btn-danger" type="submit">Keluar</button>
+        </form>
     </header>
 
     <main class="container">
         @if (session('status'))
             <div class="alert">{{ session('status') }}</div>
+        @endif
+        @if ($errors->any())
+            <div class="alert" role="alert">{{ $errors->first() }}</div>
         @endif
 
         <section class="metrics-grid">
@@ -391,6 +406,28 @@
                     </tbody>
                 </table>
             </div>
+        </section>
+
+        <section class="card feature-packages">
+            <h2>Fitur per Paket</h2>
+            <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">Perubahan berlaku pada token lisensi baru atau setelah perangkat memvalidasi ulang lisensi.</p>
+            @foreach ($packages as $pkg)
+                <details>
+                    <summary>{{ $pkg->code }} — {{ $pkg->features_count }} fitur aktif</summary>
+                    <form method="POST" action="{{ route('admin.packages.features', $pkg) }}">
+                        @csrf
+                        <div class="feature-options">
+                            @foreach ($features as $feature)
+                                <label>
+                                    <input type="checkbox" name="feature_ids[]" value="{{ $feature->id }}" @checked($pkg->features->contains($feature->id))>
+                                    <span>{{ $feature->name }}<small>{{ $feature->module }} · {{ $feature->code }}</small></span>
+                                </label>
+                            @endforeach
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width:auto;">Simpan Fitur {{ $pkg->code }}</button>
+                    </form>
+                </details>
+            @endforeach
         </section>
 
         <section class="card">

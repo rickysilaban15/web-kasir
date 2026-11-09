@@ -12,9 +12,9 @@ return [
     | aplikasi Flutter untuk memverifikasi keaslian token.
     |
     */
-    'signing_private_key' => env('LICENSE_SIGNING_PRIVATE_KEY', ''),
-    'signing_public_key' => env('LICENSE_SIGNING_PUBLIC_KEY', ''),
+    'signing_private_key' => env('LARIS_LICENSE_PRIVATE_KEY', ''),
+    'signing_public_key' => env('LARIS_LICENSE_PUBLIC_KEY', ''),
 
-    'default_offline_grace_days' => (int) env('LICENSE_OFFLINE_GRACE_DAYS', 7),
+    'default_offline_grace_days' => (int) env('LARIS_DEFAULT_OFFLINE_GRACE_DAYS', 7),
 ];
 

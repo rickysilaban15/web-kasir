@@ -3,9 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\AppVersion;
-use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
@@ -15,18 +13,6 @@ class DatabaseSeeder extends Seeder
             FeatureSeeder::class,
             PackageSeeder::class,
         ]);
-
-        User::updateOrCreate(
-            ['email' => 'admin@laris.id'],
-            [
-                'name' => 'Administrator LARIS',
-                'phone' => '081200000000',
-                'password' => Hash::make('AdminLaris#2026'),
-                'role' => 'admin',
-                'status' => 'active',
-                'email_verified_at' => now(),
-            ]
-        );
 
         AppVersion::updateOrCreate(
             ['platform' => 'android', 'version_code' => 1],

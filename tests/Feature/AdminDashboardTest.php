@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\License;
+use App\Models\Feature;
 use App\Models\LicenseActivation;
 use App\Models\Package;
 use App\Models\User;
@@ -22,6 +23,8 @@ class AdminDashboardTest extends TestCase
 
     public function test_admin_dashboard_renders_metrics_and_can_issue_extend_deactivate_and_revoke_license(): void
     {
+        $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
+        $this->actingAs($admin);
         $response = $this->get('/admin');
         $response->assertStatus(200);
         $response->assertSee('LARIS Licensing & Admin Console', false);
@@ -96,5 +99,89 @@ class AdminDashboardTest extends TestCase
         $suspendResponse->assertRedirect('/admin');
         $merchantUser->refresh();
         $this->assertSame('suspended', $merchantUser->status);
+
+        $this->post("/admin/users/{$admin->id}/toggle-status")
+            ->assertSessionHasErrors('user');
+        $this->assertSame('active', $admin->fresh()->status);
+    }
+
+    public function test_admin_routes_require_an_active_admin_session(): void
+    {
+        $this->get('/admin')->assertRedirect('/admin/login');
+        $this->post('/admin/licenses', [
+            'package_code' => 'PRO',
+            'duration_days' => 30,
+        ])->assertRedirect('/admin/login');
+
+        $merchant = User::factory()->create(['role' => 'user', 'status' => 'active']);
+        $this->actingAs($merchant);
+        $this->get('/admin')->assertForbidden();
+        $this->post('/admin/licenses', [
+            'package_code' => 'PRO',
+            'duration_days' => 30,
+        ])->assertForbidden();
+
+        $suspended = User::factory()->create(['role' => 'admin', 'status' => 'suspended']);
+        $this->actingAs($suspended);
+        $this->get('/admin')->assertForbidden();
+    }
+
+    public function test_admin_can_login_and_logout_with_session(): void
+    {
+        $admin = User::factory()->create([
+            'email' => 'admin.test@laris.id',
+            'password' => 'SandiAdminKuat#2026',
+            'role' => 'admin',
+            'status' => 'active',
+        ]);
+
+        $this->get('/admin/login')->assertOk()->assertSee('Masuk admin');
+        $this->post('/admin/login', [
+            'email' => $admin->email,
+            'password' => 'salah',
+        ])->assertSessionHasErrors('email');
+        $this->post('/admin/login', [
+            'email' => $admin->email,
+            'password' => 'SandiAdminKuat#2026',
+        ])->assertRedirect('/admin');
+        $this->assertAuthenticatedAs($admin);
+        $this->get('/admin')->assertOk();
+        $this->post('/admin/logout')->assertRedirect('/admin/login');
+        $this->assertGuest();
+
+        $legacy = User::factory()->create([
+            'email' => 'admin.legacy@laris.id',
+            'password' => 'AdminLaris#2026',
+            'role' => 'admin',
+            'status' => 'active',
+        ]);
+        $this->post('/admin/login', [
+            'email' => $legacy->email,
+            'password' => 'AdminLaris#2026',
+        ])->assertSessionHasErrors('email');
+        $this->assertGuest();
+    }
+
+    public function test_admin_can_update_package_features_and_change_is_audited(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
+        $this->actingAs($admin);
+        $package = Package::where('code', 'PRO')->firstOrFail();
+        $feature = Feature::where('code', 'profit_analysis')->firstOrFail();
+
+        $this->post("/admin/packages/{$package->id}/features", [
+            'feature_ids' => [$feature->id],
+        ])->assertRedirect('/admin');
+        $this->assertEqualsCanonicalizing([$feature->id], $package->features()->pluck('features.id')->all());
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'package.features_updated',
+            'actor_id' => $admin->id,
+            'target_id' => (string) $package->id,
+        ]);
+
+        $this->post("/admin/packages/{$package->id}/features", [
+            'feature_ids' => [999999],
+        ])->assertSessionHasErrors('feature_ids.0');
+        $this->assertEqualsCanonicalizing([$feature->id], $package->features()->pluck('features.id')->all());
     }
 }

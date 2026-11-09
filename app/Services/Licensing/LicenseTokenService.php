@@ -130,21 +130,36 @@ class LicenseTokenService
         $configuredPrivate = (string) config('licensing.signing_private_key', '');
         $configuredPublic = (string) config('licensing.signing_public_key', '');
 
-        if ($configuredPrivate !== '' && $configuredPublic !== '') {
+        if ($configuredPrivate !== '' || $configuredPublic !== '') {
             $secretKey = base64_decode($configuredPrivate, true);
-            if ($secretKey !== false && strlen($secretKey) === SODIUM_CRYPTO_SIGN_SECRETKEYBYTES) {
-                return [$secretKey, $configuredPublic];
+            $publicKey = base64_decode($configuredPublic, true);
+            if ($secretKey === false ||
+                strlen($secretKey) !== SODIUM_CRYPTO_SIGN_SECRETKEYBYTES ||
+                $publicKey === false ||
+                strlen($publicKey) !== SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES ||
+                ! hash_equals(sodium_crypto_sign_publickey_from_secretkey($secretKey), $publicKey)) {
+                throw new RuntimeException('Pasangan kunci Ed25519 lisensi tidak valid.');
             }
+
+            return [$secretKey, $configuredPublic];
         }
 
         // Deterministic keypair dari APP_KEY apabila env khusus belum diset
-        $appKey = (string) config('app.key', 'laris-default-seed-key');
+        $appKey = (string) config('app.key', '');
+        if ($appKey === '') {
+            throw new RuntimeException('APP_KEY harus disetel sebelum menerbitkan token lisensi.');
+        }
         $seed = substr(hash('sha256', $appKey, true), 0, SODIUM_CRYPTO_SIGN_SEEDBYTES);
         $keyPair = sodium_crypto_sign_seed_keypair($seed);
         $secretKey = sodium_crypto_sign_secretkey($keyPair);
         $publicKey = sodium_crypto_sign_publickey($keyPair);
 
         return [$secretKey, base64_encode($publicKey)];
+    }
+
+    public function publicKeyBase64(): string
+    {
+        return $this->resolveSigningKeys()[1];
     }
 
     private function base64UrlEncode(string $data): string
